@@ -159,11 +159,12 @@ Deleted branch fix/typo (was 81d07aa).
 
 Only merged branches are deleted, with `git branch -d`. `--force` deletes
 unmerged ones too, with `git branch -D`. `--dry-run` prints the exact
-command instead of running it:
+command instead of running it. Branch names are passed after `--`, so a
+name such as `--force` is deleted as a branch rather than read as an option.
 
 ```console
 $ stale-branches --dry-run --force
-git branch -D spike/parser feature/login fix/typo
+git branch -D -- spike/parser feature/login fix/typo
 ```
 
 `git branch -d` checks merges against `HEAD` (or the branch's upstream), not
@@ -216,10 +217,10 @@ feature/login  4 months ago  Bob     merged      0      31
 dependabot/x   3 weeks ago   bot     merged      0       9
 
 $ stale-branches --remote --merged --dry-run
-git push origin --delete feature/login dependabot/x
+git push origin --delete -- feature/login dependabot/x
 ```
 
-Remote deletions go out in a single `git push <remote> --delete`. The remote
+Remote deletions go out in a single `git push <remote> --delete --`. The remote
 branch matching your current branch (by name or as its upstream) is protected
 like the current branch is locally. Use `--remote-name upstream` for a
 different remote; it also picks which `<remote>/HEAD` is used to detect the
