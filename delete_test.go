@@ -16,10 +16,10 @@ func TestDryRun(t *testing.T) {
 		want    string
 		skipped []string
 	}{
-		{[]string{"--dry-run"}, fmt.Sprintf("git -C %s branch -d feature/merged\n", r.dir), []string{"feature/old"}},
-		{[]string{"--delete", "-n"}, fmt.Sprintf("git -C %s branch -d feature/merged\n", r.dir), []string{"feature/old"}},
-		{[]string{"-n", "--force"}, fmt.Sprintf("git -C %s branch -D feature/merged feature/old\n", r.dir), nil},
-		{[]string{"-n", "--unmerged", "--force"}, fmt.Sprintf("git -C %s branch -D feature/old feature/new\n", r.dir), nil},
+		{[]string{"--dry-run"}, fmt.Sprintf("git -C %s branch -d -- feature/merged\n", r.dir), []string{"feature/old"}},
+		{[]string{"--delete", "-n"}, fmt.Sprintf("git -C %s branch -d -- feature/merged\n", r.dir), []string{"feature/old"}},
+		{[]string{"-n", "--force"}, fmt.Sprintf("git -C %s branch -D -- feature/merged feature/old\n", r.dir), nil},
+		{[]string{"-n", "--unmerged", "--force"}, fmt.Sprintf("git -C %s branch -D -- feature/old feature/new\n", r.dir), nil},
 		{[]string{"-n", "--unmerged"}, "", []string{"feature/old", "feature/new"}},
 	}
 	for _, tt := range tests {
@@ -42,6 +42,30 @@ func TestDryRun(t *testing.T) {
 	}
 	if after := r.branchNames(); !slices.Equal(before, after) {
 		t.Errorf("dry run changed branches: %v -> %v", before, after)
+	}
+}
+
+func TestDeleteBranchNamedLikeFlag(t *testing.T) {
+	r := fixture(t)
+	// A ref git itself will not create with `git branch`, but which can
+	// still exist. Without a "--" separator, `git branch -d feature/merged
+	// --force` deletes feature/merged, exits 0, and leaves --force behind.
+	r.git("update-ref", "refs/heads/--force", "main")
+
+	out, stderr, code := r.runTool("-n", "--merged")
+	if code != exitOK {
+		t.Fatalf("exit %d: %s", code, stderr)
+	}
+	want := fmt.Sprintf("git -C %s branch -d -- feature/merged --force\n", r.dir)
+	if out != want {
+		t.Errorf("dry-run %q, want %q", out, want)
+	}
+
+	if _, stderr, code = r.runTool("--delete", "-y", "--merged"); code != exitOK {
+		t.Fatalf("delete exit %d: %s", code, stderr)
+	}
+	if got, want := r.branchNames(), []string{"feature/new", "feature/old", "main"}; !slices.Equal(got, want) {
+		t.Errorf("branches %v, want %v", got, want)
 	}
 }
 

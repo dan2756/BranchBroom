@@ -23,12 +23,15 @@ func planDeletion(branches []Branch, force bool) (del, skipped []Branch) {
 }
 
 // deleteArgs returns the git arguments that delete branches.
+// Names follow "--" so a branch called --force is not read as an option:
+// git branch -D feature --force would delete feature, exit 0, and leave
+// the branch named --force in place.
 func deleteArgs(branches []Branch, force bool) []string {
 	flag := "-d"
 	if force {
 		flag = "-D"
 	}
-	args := []string{"branch", flag}
+	args := []string{"branch", flag, "--"}
 	for _, b := range branches {
 		args = append(args, b.Name)
 	}
@@ -36,9 +39,10 @@ func deleteArgs(branches []Branch, force bool) []string {
 }
 
 // pushDeleteArgs returns the git arguments that delete branches from a
-// remote in a single push.
+// remote in a single push. Names follow "--" for the same reason as
+// deleteArgs.
 func pushDeleteArgs(remote string, branches []Branch) []string {
-	args := []string{"push", remote, "--delete"}
+	args := []string{"push", remote, "--delete", "--"}
 	for _, b := range branches {
 		args = append(args, b.Name)
 	}

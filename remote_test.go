@@ -107,14 +107,14 @@ func TestRemoteCurrentIsProtected(t *testing.T) {
 func TestRemoteDryRunAndDelete(t *testing.T) {
 	r, bare := remoteFixture(t)
 	out, stderr, _ := r.runTool("--remote", "-n")
-	if out != fmt.Sprintf("git -C %s push origin --delete feature/merged\n", r.dir) {
+	if out != fmt.Sprintf("git -C %s push origin --delete -- feature/merged\n", r.dir) {
 		t.Errorf("dry run %q", out)
 	}
 	if !strings.Contains(stderr, "skipping feature/old: not merged into origin/main") {
 		t.Errorf("stderr %q", stderr)
 	}
 	out, _, _ = r.runTool("--remote", "-n", "--force")
-	if out != fmt.Sprintf("git -C %s push origin --delete feature/merged feature/old\n", r.dir) {
+	if out != fmt.Sprintf("git -C %s push origin --delete -- feature/merged feature/old\n", r.dir) {
 		t.Errorf("dry run --force %q", out)
 	}
 
@@ -137,6 +137,29 @@ func TestRemoteDryRunAndDelete(t *testing.T) {
 	}
 }
 
+func TestRemoteDeleteBranchNamedLikeFlag(t *testing.T) {
+	r, bare := remoteFixture(t)
+	// push would treat a trailing --force as the force flag and still exit 0
+	// after deleting the other branch.
+	r.git("push", "-q", "origin", "main:refs/heads/--force")
+
+	out, stderr, code := r.runTool("--remote", "-n", "--merged")
+	if code != exitOK {
+		t.Fatalf("exit %d: %s", code, stderr)
+	}
+	want := fmt.Sprintf("git -C %s push origin --delete -- feature/merged --force\n", r.dir)
+	if out != want {
+		t.Errorf("dry-run %q, want %q", out, want)
+	}
+
+	if _, stderr, code = r.runTool("--remote", "--merged", "--delete", "-y"); code != exitOK {
+		t.Fatalf("delete exit %d: %s", code, stderr)
+	}
+	if got, want := bareBranches(t, bare), []string{"feature/new", "feature/old", "main"}; !slices.Equal(got, want) {
+		t.Errorf("remote branches %v, want %v", got, want)
+	}
+}
+
 func TestRemoteName(t *testing.T) {
 	r, _ := remoteFixture(t)
 	r.addRemote("upstream", "main", "feature/old")
@@ -148,7 +171,7 @@ func TestRemoteName(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 	out, _, _ = r.runTool("--remote", "--remote-name=upstream", "-n", "--force")
-	if out != fmt.Sprintf("git -C %s push upstream --delete feature/old\n", r.dir) {
+	if out != fmt.Sprintf("git -C %s push upstream --delete -- feature/old\n", r.dir) {
 		t.Errorf("dry run %q", out)
 	}
 
@@ -205,7 +228,7 @@ func TestRemoteSkipsNonBranchRefs(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 	out, _, _ = r.runTool("--remote", "-n")
-	if out != fmt.Sprintf("git -C %s push origin --delete feature/merged\n", r.dir) {
+	if out != fmt.Sprintf("git -C %s push origin --delete -- feature/merged\n", r.dir) {
 		t.Errorf("dry run %q", out)
 	}
 	if _, stderr, code := r.runTool("--remote", "--merged", "--delete", "-y"); code != exitOK {
