@@ -110,6 +110,57 @@ func TestProtectGitConfig(t *testing.T) {
 	}
 }
 
+func TestSymrefBaseIsProtected(t *testing.T) {
+	r := newTestRepo(t)
+	r.commit("README", 30*day)
+	r.git("branch", "-m", "trunk")
+	r.git("branch", "feature/old")
+	r.git("switch", "-q", "feature/old")
+	r.commit("old.txt", 20*day)
+	r.git("switch", "-q", "trunk")
+	r.merge("feature/old", 15*day)
+	r.commit("README", 1*day)
+	// topic contains trunk, so git branch -d trunk would succeed from here.
+	r.git("switch", "-q", "-c", "topic")
+	r.git("update-ref", "refs/remotes/origin/trunk", "trunk")
+	r.git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk")
+
+	out, stderr, code := r.runTool("--json", "--all", "--base", "origin/HEAD", "--protect", "")
+	if code != exitOK {
+		t.Fatalf("exit %d: %s", code, stderr)
+	}
+	var got jsonOutput
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Base != "origin/HEAD" {
+		t.Errorf("base %q, want origin/HEAD", got.Base)
+	}
+	notes := map[string]string{}
+	for _, b := range got.Branches {
+		notes[b.Name] = b.Note
+	}
+	if notes["trunk"] != "base" || notes["topic"] != "current" || notes["feature/old"] != "" {
+		t.Errorf("notes %v", notes)
+	}
+
+	// trunk is the base even though it is not in the protect list, and
+	// --force would otherwise delete it with git branch -D.
+	out, stderr, code = r.runTool("-n", "--force", "--base", "origin/HEAD", "--protect", "")
+	if code != exitOK {
+		t.Fatalf("dry-run exit %d: %s", code, stderr)
+	}
+	if strings.Contains(out, "trunk") || strings.Contains(out, "topic") || !strings.Contains(out, "feature/old") {
+		t.Errorf("dry-run %q", out)
+	}
+	if _, stderr, code = r.runTool("--delete", "-y", "--force", "--base", "origin/HEAD", "--protect", ""); code != exitOK {
+		t.Fatalf("delete exit %d: %s", code, stderr)
+	}
+	if got, want := r.branchNames(), []string{"topic", "trunk"}; !slices.Equal(got, want) {
+		t.Errorf("branches %v, want %v", got, want)
+	}
+}
+
 func TestDetachedHead(t *testing.T) {
 	r := fixture(t)
 	r.git("switch", "-q", "--detach", "feature/old")

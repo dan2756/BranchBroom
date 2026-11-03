@@ -290,8 +290,9 @@ func selectBranches(r *repo, opts *options, now time.Time) (*selection, error) {
 		return nil, err
 	}
 	// Protection and hints want the plain branch name, so that
-	// --base origin/main still protects the branch called main.
-	baseName = strings.TrimPrefix(shortRef(base), r.remote+"/")
+	// --base origin/main still protects the branch called main, and
+	// --base origin/HEAD protects the branch that symref points at.
+	baseName = r.plainBaseName(base)
 	globs, err := r.protectGlobs(opts.protect)
 	if err != nil {
 		return nil, err
