@@ -94,6 +94,24 @@ func shortRef(ref string) string {
 	return ref
 }
 
+// plainBaseName is the branch to protect for a resolved base ref.
+// A symbolic ref is followed one step, so --base origin/HEAD protects the
+// branch it points at (trunk, main, ...) instead of a branch named HEAD.
+// Revisions such as HEAD~1 have no symbolic name and stay as given, and a
+// detached HEAD stays HEAD.
+func (r *repo) plainBaseName(ref string) string {
+	if out, err := r.git.output("rev-parse", "--symbolic-full-name", ref); err == nil {
+		if full := strings.TrimSpace(out); full != "" && full != ref && full != "HEAD" {
+			ref = full
+		}
+	}
+	name := shortRef(ref)
+	if rest, ok := strings.CutPrefix(name, r.remote+"/"); ok && rest != "" {
+		return rest
+	}
+	return name
+}
+
 // checkRemote fails unless r.remote is a configured remote.
 func (r *repo) checkRemote() error {
 	out, err := r.git.output("remote")

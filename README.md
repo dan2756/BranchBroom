@@ -37,6 +37,8 @@ exists, as after the remote renamed `master` to `main`), else `main`, else
 branch is preferred when it exists; `--base origin/main` compares against the
 remote-tracking branch instead, which is handy when your local `main` is
 behind. `--base HEAD` compares against the commit you have checked out.
+Passing the symbolic ref itself, as in `--base origin/HEAD`, protects the
+branch it points to.
 
 | Flag | Meaning |
 | --- | --- |
