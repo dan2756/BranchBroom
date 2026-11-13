@@ -58,6 +58,11 @@ func (r *repo) detectBase() (string, error) {
 // then the other one, then whatever git makes of the name. HEAD and
 // revisions relative to it, such as HEAD~2, are taken as they are, so
 // that they do not resolve to <remote>/HEAD.
+//
+// A remote-tracking shorthand such as origin/main is that ref, not a
+// local branch that happens to share the name. Prepending refs/heads/
+// or refs/remotes/<remote>/ to the whole shorthand would look up
+// refs/heads/origin/main and refs/remotes/origin/origin/main instead.
 func (r *repo) resolveBase(name string, remoteMode bool) (string, error) {
 	local, tracking := "refs/heads/"+name, "refs/remotes/"+r.remote+"/"+name
 	candidates := []string{local, tracking, name}
@@ -66,6 +71,8 @@ func (r *repo) resolveBase(name string, remoteMode bool) (string, error) {
 	}
 	if isHeadRevision(name) {
 		candidates = []string{name}
+	} else if rest, ok := strings.CutPrefix(name, r.remote+"/"); ok && rest != "" {
+		candidates = []string{"refs/remotes/" + r.remote + "/" + rest, local, name}
 	}
 	for _, ref := range candidates {
 		if r.git.refExists(ref) {
@@ -99,17 +106,21 @@ func shortRef(ref string) string {
 // branch it points at (trunk, main, ...) instead of a branch named HEAD.
 // Revisions such as HEAD~1 have no symbolic name and stay as given, and a
 // detached HEAD stays HEAD.
+//
+// Only a remote-tracking ref loses its <remote>/ prefix. A local branch
+// named origin/feature is not the remote-tracking branch origin/feature,
+// and stripping it would protect feature while leaving the base itself
+// unprotected.
 func (r *repo) plainBaseName(ref string) string {
 	if out, err := r.git.output("rev-parse", "--symbolic-full-name", ref); err == nil {
 		if full := strings.TrimSpace(out); full != "" && full != ref && full != "HEAD" {
 			ref = full
 		}
 	}
-	name := shortRef(ref)
-	if rest, ok := strings.CutPrefix(name, r.remote+"/"); ok && rest != "" {
-		return rest
+	if name, ok := strings.CutPrefix(ref, "refs/remotes/"+r.remote+"/"); ok && name != "" {
+		return name
 	}
-	return name
+	return shortRef(ref)
 }
 
 // checkRemote fails unless r.remote is a configured remote.
