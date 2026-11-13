@@ -36,9 +36,10 @@ exists, as after the remote renamed `master` to `main`), else `main`, else
 `master`. Use `--base develop` to compare against something else. The local
 branch is preferred when it exists; `--base origin/main` compares against the
 remote-tracking branch instead, which is handy when your local `main` is
-behind. `--base HEAD` compares against the commit you have checked out.
-Passing the symbolic ref itself, as in `--base origin/HEAD`, protects the
-branch it points to.
+behind. A local branch that is itself named `origin/main` does not take its
+place; pass `--base refs/heads/origin/main` to use that branch. `--base HEAD`
+compares against the commit you have checked out. Passing the symbolic ref
+itself, as in `--base origin/HEAD`, protects the branch it points to.
 
 | Flag | Meaning |
 | --- | --- |

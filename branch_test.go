@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -154,6 +155,103 @@ func TestBaseFlag(t *testing.T) {
 	if code != exitError || !strings.Contains(stderr, `"nope" not found`) {
 		t.Errorf("exit %d, stderr %q", code, stderr)
 	}
+}
+
+func TestBaseRemoteShorthand(t *testing.T) {
+	t.Run("remote tracking wins over a same-named local branch", func(t *testing.T) {
+		r := newTestRepo(t)
+		r.commit("README", 30*day) // A
+		r.git("branch", "feature")
+		r.git("branch", "origin/feature")
+		r.commit("README", 1*day) // B, main moves on
+		r.git("branch", "-f", "origin/feature", "main")
+		r.git("update-ref", "refs/remotes/origin/feature", "feature")
+
+		out, stderr, code := r.runTool("--json", "--all", "--protect", "", "--base", "origin/feature")
+		if code != exitOK {
+			t.Fatalf("exit %d: %s", code, stderr)
+		}
+		var got jsonOutput
+		if err := json.Unmarshal([]byte(out), &got); err != nil {
+			t.Fatal(err)
+		}
+		if got.Base != "origin/feature" {
+			t.Errorf("base %q, want origin/feature", got.Base)
+		}
+		byName := map[string]jsonBranch{}
+		for _, b := range got.Branches {
+			byName[b.Name] = b
+		}
+		// Remote origin/feature is A. Local origin/feature and main are B.
+		if b := byName["feature"]; !b.Merged || b.Ahead != 0 || b.Behind != 0 || b.Note != "base" {
+			t.Errorf("feature: %+v, want merged base at the remote tip", b)
+		}
+		if b := byName["origin/feature"]; b.Merged || b.Ahead != 1 || b.Note != "" {
+			t.Errorf("local origin/feature: %+v, want an ordinary unmerged branch", b)
+		}
+		if b := byName["main"]; b.Merged || b.Note != "current" {
+			t.Errorf("main: %+v", b)
+		}
+	})
+
+	t.Run("local branch keeps its own name when it is the base", func(t *testing.T) {
+		r := newTestRepo(t)
+		r.commit("README", 30*day)
+		r.git("branch", "feature")
+		r.git("branch", "origin/feature")
+		r.commit("README", 1*day)
+
+		out, stderr, code := r.runTool("--json", "--all", "--protect", "", "--base", "origin/feature")
+		if code != exitOK {
+			t.Fatalf("exit %d: %s", code, stderr)
+		}
+		var got jsonOutput
+		if err := json.Unmarshal([]byte(out), &got); err != nil {
+			t.Fatal(err)
+		}
+		notes := map[string]string{}
+		for _, b := range got.Branches {
+			notes[b.Name] = b.Note
+		}
+		if notes["origin/feature"] != "base" || notes["feature"] != "" {
+			t.Errorf("notes %v", notes)
+		}
+
+		out, stderr, code = r.runTool("-n", "--force", "--protect", "", "--base", "origin/feature")
+		if code != exitOK {
+			t.Fatalf("dry-run exit %d: %s", code, stderr)
+		}
+		if strings.Contains(out, "origin/feature") || !strings.Contains(out, "feature") {
+			t.Errorf("dry-run %q", out)
+		}
+	})
+
+	t.Run("explicit local ref is not stripped", func(t *testing.T) {
+		r := newTestRepo(t)
+		r.commit("README", 10*day)
+		r.git("branch", "feature")
+		r.git("branch", "origin/feature")
+		r.git("update-ref", "refs/remotes/origin/feature", "main")
+		r.commit("README", 1*day)
+		r.git("branch", "-f", "origin/feature", "main")
+
+		out, stderr, code := r.runTool("--json", "--all", "--protect", "", "--base", "refs/heads/origin/feature")
+		if code != exitOK {
+			t.Fatalf("exit %d: %s", code, stderr)
+		}
+		var got jsonOutput
+		if err := json.Unmarshal([]byte(out), &got); err != nil {
+			t.Fatal(err)
+		}
+		for _, b := range got.Branches {
+			if b.Name == "origin/feature" && b.Note != "base" {
+				t.Errorf("origin/feature note %q, want base", b.Note)
+			}
+			if b.Name == "feature" && b.Note == "base" {
+				t.Errorf("feature was protected as the base")
+			}
+		}
+	})
 }
 
 func TestNotARepo(t *testing.T) {
