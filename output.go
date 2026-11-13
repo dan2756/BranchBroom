@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"golang.org/x/text/width"
 )
@@ -175,10 +176,15 @@ func writeTable(w io.Writer, branches []Branch, now time.Time, color bool) error
 }
 
 // displayWidth is the number of terminal columns s takes up: wide and
-// fullwidth characters, e.g. CJK, take two.
+// fullwidth characters, e.g. CJK, take two. Combining marks and format
+// characters (variation selectors, zero-width spaces, ZWJ) take none;
+// East Asian width calls some of them ambiguous, which would pad the row.
 func displayWidth(s string) int {
 	n := 0
 	for _, r := range s {
+		if unicode.Is(unicode.Mn, r) || unicode.Is(unicode.Me, r) || unicode.Is(unicode.Cf, r) {
+			continue
+		}
 		switch width.LookupRune(r).Kind() {
 		case width.EastAsianWide, width.EastAsianFullwidth:
 			n += 2

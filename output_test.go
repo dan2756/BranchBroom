@@ -75,6 +75,30 @@ func TestWriteTableWideCharacters(t *testing.T) {
 
 var ansiRE = regexp.MustCompile("\x1b\\[[0-9;]*m")
 
+func TestWriteTableCombiningMarks(t *testing.T) {
+	if got := displayWidth("a\u0301"); got != 1 {
+		t.Fatalf("combining acute width %d, want 1", got)
+	}
+	if got := displayWidth("\u200b"); got != 0 {
+		t.Fatalf("zero-width space width %d, want 0", got)
+	}
+	branches := []Branch{
+		{Name: "cafe\u0301", Date: refTime.Add(-time.Hour), Author: "A\u0301lice", Ahead: 1},
+		{Name: "cafe", Date: refTime.Add(-2 * time.Hour), Author: "Alice", Ahead: 2},
+	}
+	var buf bytes.Buffer
+	if err := writeTable(&buf, branches, refTime, false); err != nil {
+		t.Fatal(err)
+	}
+	want := "" +
+		"BRANCH  AGE          AUTHOR  STATUS    AHEAD  BEHIND\n" +
+		"cafe\u0301    1 hour ago   A\u0301lice   unmerged      1       0\n" +
+		"cafe    2 hours ago  Alice   unmerged      2       0\n"
+	if got := buf.String(); got != want {
+		t.Errorf("table:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 func TestWriteTableColor(t *testing.T) {
 	branches := []Branch{
 		{Name: "feature/login", Date: refTime.Add(-120 * day), Author: "Alice", Merged: true, Behind: 12},
